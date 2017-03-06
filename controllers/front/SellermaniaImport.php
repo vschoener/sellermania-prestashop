@@ -82,12 +82,15 @@ class SellermaniaImportController
 
             // Up time and memory limit
             set_time_limit(600);
-            ini_set('memory_limit', '256M');
+            //ini_set('memory_limit', '256M');
 
             // Import orders
             $controller = new SellermaniaDisplayBackOfficeHeaderController($this->module, $this->dir_path, $this->web_path);
             $controller->verbose = true;
             $controller->importOrders();
+
+            // Check if there are handled orders
+            (new SellermaniaRepository(Db::getInstance()))->checkHandledOrders();
         }
         else {
             die('ERROR3');

@@ -43,8 +43,24 @@ class SellermaniaDisplayBackOfficeHeaderController
 {
     public $verbose = false;
 
+    public $currentController;
+
+    /** @var  Sellermania */
+    public $module;
+
+    public $web_path;
+
+    public $dir_path;
+
+    public $context;
+
+    public $ps_version;
+
     /**
      * Controller constructor
+     * @param $module
+     * @param $dir_path
+     * @param $web_path
      */
     public function __construct($module, $dir_path, $web_path)
     {
@@ -53,6 +69,8 @@ class SellermaniaDisplayBackOfficeHeaderController
         $this->dir_path = $dir_path;
         $this->context = Context::getContext();
         $this->ps_version = str_replace('.', '', substr(_PS_VERSION_, 0, 3));
+
+        $this->sellermaniaRepository = new SellermaniaRepository(Db::getInstance());
     }
 
     /**
@@ -109,11 +127,13 @@ class SellermaniaDisplayBackOfficeHeaderController
                 $this->speak(count($result['SellermaniaWs']['GetOrderResponse']['Order']).' orders retrieved');
 
                 // Import order
-                foreach ($result['SellermaniaWs']['GetOrderResponse']['Order'] as $order)
+                $totalOrder = count($result['SellermaniaWs']['GetOrderResponse']['Order']);
+
+                foreach ($result['SellermaniaWs']['GetOrderResponse']['Order'] as $orderIndex => $order)
                     if (isset($order['OrderInfo']['OrderId']))
                     {
                         // Verbose mode
-                        $this->speak('Import order #'.$order['OrderInfo']['OrderId'].' from '.$order['OrderInfo']['MarketPlace']);
+                        $this->speak('['.$orderIndex.'/'.$totalOrder.'] - Import order #'.$order['OrderInfo']['OrderId'].' from '.$order['OrderInfo']['MarketPlace']);
 
                         // Check if order exists
                         $id_sellermania_order = SellermaniaOrder::getSellermaniaOrderId($order['OrderInfo']['MarketPlace'], $order['OrderInfo']['OrderId']);
@@ -148,7 +168,7 @@ class SellermaniaDisplayBackOfficeHeaderController
                         else
                         {
                             // Verbose mode
-                            $this->speak('Order does not exist, we create it');
+                            $this->speak('['.$orderIndex.'/'.$totalOrder.'] - Order does not exist, we create it');
 
                             // Save config value
                             $ps_guest_checkout_enabled = Configuration::get('PS_GUEST_CHECKOUT_ENABLED');
@@ -191,7 +211,7 @@ class SellermaniaDisplayBackOfficeHeaderController
                             Configuration::updateValue('PS_ORDER_OUT_OF_STOCK', $ps_order_out_of_stock);
 
                             // Do not push it too hard
-                            if ($count_order > 100)
+                            if (php_sapi_name() != 'cli' && $count_order > 100)
                                 return true;
                         }
                     }
@@ -338,7 +358,20 @@ class SellermaniaDisplayBackOfficeHeaderController
             $this->context->smarty->assign('sellermania_module_path', $this->web_path);
             $this->context->smarty->assign('sellermania_invoice_url', FroggyLib::getAdminLink('AdminModules').'&configure=sellermania&module_name=sellermania&display=invoice');
 
-            return $this->module->compliantDisplay('displayBackOfficeHeader.tpl');
+            $templateContent = '';
+            if (!Tools::isSubmit('id_order')) {
+
+                $template = $this->context->smarty->createTemplate(__DIR__.'/../../views/templates/hook/admin/admin-orders.tpl');
+                $template->assign([
+                    'isPs14' => ($isPs14 = version_compare(_PS_VERSION_, '1.5', '<')),
+                    'isPs15' => !$isPs14 && ($isPs15 = version_compare(_PS_VERSION_, '1.6', '<')),
+                    'notHandledOrder' => $this->sellermaniaRepository->getNotHandledOrder(),
+                    'requestUrl' => Tools::getProtocol().Configuration::get('PS_SHOP_DOMAIN').__PS_BASE_URI__.'modules/sellermania/validate-order.php',
+                ]);
+                $templateContent = $template->fetch();
+            }
+
+            return $templateContent.$this->module->compliantDisplay('displayBackOfficeHeader.tpl');
         }
     }
 

@@ -31,6 +31,8 @@ class Sellermania extends Module
     public $sellermania_order_states;
     public $sellermania_conditions_list;
 
+    private $sellermaniaRepository;
+
     /**
      * Module Constructor
      */
@@ -39,7 +41,7 @@ class Sellermania extends Module
         $this->name = 'sellermania';
         $this->tab = 'advertising_marketing';
         $this->author = 'Froggy Commerce';
-        $this->version = '2.0.16';
+        $this->version = '2.0.17';
         $this->need_instance = 0;
 
         parent::__construct();
@@ -55,6 +57,7 @@ class Sellermania extends Module
         $this->displayName = $this->l('Sellermania');
         $this->description = $this->l('Connect your PrestaShop with Sellermania webservices');
 
+        $this->sellermaniaRepository = new SellermaniaRepository(Db::getInstance());
         $this->loadSellermaniaOrderStates();
         $this->loadSellermaniaConditionsList();
         $this->upgrade();
@@ -139,6 +142,16 @@ class Sellermania extends Module
             // Set module version
             Configuration::updateValue('SM_VERSION', $this->version);
         }
+
+        // Update `sellermania_order` with new field
+        if (version_compare($version_registered, '2.0.17', '<')) {
+            Db::getInstance()->execute('
+                ALTER TABLE `ps_sellermania_order` ADD `isHandled` TINYINT  NULL  DEFAULT \'0\'  AFTER `date_add`;
+            ');
+            $this->sellermaniaRepository->checkHandledOrders();
+            Configuration::updateValue('SM_VERSION', $this->version);
+        }
+
         if (Configuration::get('SM_EXPORT_ALL') == '')
             Configuration::updateValue('SM_EXPORT_ALL', 'yes');
 
@@ -390,11 +403,17 @@ class Sellermania extends Module
      */
     public function runController($controller_type, $controller_name, $params = array())
     {
+        $currentController = Tools::getValue('controller');
+        if (!$currentController) {
+            $currentController = Tools::getValue('tab');
+        }
+
         // Include the controller file
         require_once(dirname(__FILE__).'/controllers/'.$controller_type.'/Sellermania'.$controller_name.'.php');
         $controller_name = 'Sellermania'.$controller_name.'Controller';
         $controller = new $controller_name($this, dirname(__FILE__), $this->_path);
         $controller->params = $params;
+        $controller->currentController = $currentController;
 
         return $controller->run();
     }
@@ -427,7 +446,7 @@ class Sellermania extends Module
     public function hookDisplayBackOfficeHeader($params)
     {
         if (version_compare(PHP_VERSION, '5.3.0') >= 0)
-            return $this->runController('hook', 'DisplayBackOfficeHeader');
+            return $this->runController('hook', 'DisplayBackOfficeHeader', $params);
         return '';
     }
     public function hookBackOfficeHeader($params)
@@ -441,10 +460,12 @@ class Sellermania extends Module
     */
     public function hookDisplayAdminOrder($params)
     {
-        if (version_compare(PHP_VERSION, '5.3.0') >= 0)
+        if (version_compare(PHP_VERSION, '5.3.0') >= 0) {
             return $this->runController('hook', 'DisplayAdminOrder');
+        }
         return '';
     }
+
     public function hookAdminOrder($params)
     {
         return $this->hookDisplayAdminOrder($params);

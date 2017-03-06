@@ -62,6 +62,8 @@ if (!class_exists('TCPDF')) {
     }
 }
 
+require_once __DIR__.'/classes/Repository/SellermaniaRepository.php';
+
 // Set time limit
 @set_time_limit(1200);
 @ini_set('memory_limit', '512M');

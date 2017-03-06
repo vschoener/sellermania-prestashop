@@ -676,24 +676,36 @@ class SellermaniaImportOrderController
      */
     public function fixOrderDetail14($id_order, $product)
     {
-        // Calcul price without tax
+        // Calculate the price without tax
         $product_price_with_tax = $product['Amount']['Price'];
         $vat_rate = 1 + ($product['VatRate'] / 10000);
         $product_price_without_tax = $product_price_with_tax / $vat_rate;
 
+        if (!isset($product['id_product'])) {
+            $productId = Configuration::get('SM_DEFAULT_PRODUCT_ID');
+            $productAttributeId = 0;
+            $productEan = '';
+            $productSku = '';
+        } else {
+            $productId = $product['id_product'];
+            $productAttributeId = $product['id_product_attribute'];
+            $productEan = pSQL($product['Ean']);
+            $productSku = pSQL($product['Sku']);
+        }
+
         // SQL data
         $sql_data = array(
             'id_order' => (int)$id_order,
-            'product_id' => $product['id_product'],
-            'product_attribute_id' => $product['id_product_attribute'],
+            'product_id' => $productId,
+            'product_attribute_id' => $productAttributeId,
             'product_name' => pSQL($product['ItemName']),
             'product_quantity' => (int)$product['QuantityPurchased'],
             'product_quantity_in_stock' => 0,
             'product_price' => (float)$product_price_without_tax,
             'tax_rate' => (float)($product['VatRate'] / 100),
             'tax_name' => ((float)($product['VatRate'] / 100)).'%',
-            'product_ean13' => pSQL($product['Ean']),
-            'product_reference' => pSQL($product['Sku']),
+            'product_ean13' => $productEan,
+            'product_reference' => $productSku,
         );
 
 

@@ -23,6 +23,8 @@
 *  @license        http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 */
 
+ini_set('memory_limit', -1);
+
 // Construct path
 $config_path = dirname(__FILE__).'/../../config/config.inc.php';
 $module_path = dirname(__FILE__).'/sellermania.php';

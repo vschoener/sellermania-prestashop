@@ -86,6 +86,7 @@ class SellermaniaOrder extends ObjectModel
             'date_payment' =>                array('type' => 3, 'validate' => 'isDate'),
             'date_accepted' =>                array('type' => 3, 'validate' => 'isDate'),
             'date_add' =>                     array('type' => 5, 'validate' => 'isDate', 'copy_post' => false),
+            'isHandled' => ['type' => 1, 'validate' => 'isBool'],
         ),
     );
     /*    Can't use constant if we want to be compliant with PS 1.4
@@ -101,6 +102,7 @@ class SellermaniaOrder extends ObjectModel
     /**
      * Retrieve Sellermania Order object from id_order
      * @param $id_order
+     * @return SellermaniaOrder
      */
     public static function getSellermaniaOrderFromOrderId($id_order)
     {
@@ -252,5 +254,27 @@ class SellermaniaOrder extends ObjectModel
         $fields['date_add'] = pSQL($this->date_add);
 
         return $fields;
+    }
+
+    /**
+     * @return bool|mixed
+     */
+    public function getApiOrderInfo()
+    {
+        $apiInfo = false;
+        if (Validate::isLoadedObject($this)) {
+            $apiInfo = json_decode($this->info, true);
+        }
+        return $apiInfo;
+    }
+
+    /**
+     * @param array $sellermaniaOrderInfo
+     * @return $this
+     */
+    public function setApiInfo(array $sellermaniaOrderInfo)
+    {
+        $this->info = json_encode($sellermaniaOrderInfo);
+        return $this;
     }
 }

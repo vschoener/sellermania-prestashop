@@ -40,6 +40,9 @@ class SellermaniaDisplayAdminOrderController
      */
     private $status_list = array();
 
+    /** @var  SellermaniaRepository */
+    private $sellermaniaRepository;
+
     /**
      * Controller constructor
      */
@@ -65,78 +68,54 @@ class SellermaniaDisplayAdminOrderController
 
     /**
      * Save status
-     * @param string $order_id
+     * @param SellermaniaOrder $sellermaniaOrder
+     * @return array|bool
      */
-    public function saveOrderStatus($order_id, $sellermania_order)
+    public function saveProductsStatusFromRequest(SellermaniaOrder $sellermaniaOrder)
     {
-        // Check if form has been submitted
-        if (Tools::getValue('sellermania_line_max') == '')
-            return false;
+        $info = json_decode($sellermaniaOrder->info, true);
 
-        // Preprocess data
-        $order_items = array();
+        // Check if form has been submitted
+        if (Tools::getValue('sellermania_line_max') == '' || empty($info)) {
+            return false;
+        }
+
+        $products = [];
         $line_max = Tools::getValue('sellermania_line_max');
-        for ($i = 1; $i <= $line_max; $i++)
-            if (Tools::getValue('sku_status_'.$i) != '')
-            {
+        for ($i = 1; $i <= $line_max; $i++) {
+            if (Tools::getValue('sku_status_' . $i) != '') {
                 // Find match and check if not already marked as changed
-                foreach ($sellermania_order['OrderInfo']['Product'] as $kp => $product)
-                    if ($product['Sku'] == Tools::getValue('sku_status_'.$i) &&
-                        $sellermania_order['OrderInfo']['Product'][$kp]['Status'] == \Sellermania\OrderConfirmClient::STATUS_TO_BE_CONFIRMED)
-                    {
-                        $order_items[] = array(
-                            'orderId' => pSQL($order_id),
-                            'sku' => pSQL(Tools::getValue('sku_status_'.$i)),
-                            'orderStatusId' => Tools::getValue('status_'.$i),
-                            'trackingNumber' => '',
-                            'shippingCarrier' => '',
-                        );
-                        $sellermania_order['OrderInfo']['Product'][$kp]['Status'] = Tools::getValue('status_'.$i);
+                foreach ($info['OrderInfo']['Product'] as &$product)
+                    if ($product['Sku'] == Tools::getValue('sku_status_' . $i) &&
+                        $product['Status'] == \Sellermania\OrderConfirmClient::STATUS_TO_BE_CONFIRMED
+                    ) {
+                        $products[] = [
+                            'sku' => pSQL(Tools::getValue('sku_status_' . $i)),
+                            'orderStatusId' => Tools::getValue('status_' . $i),
+                        ];
+                        $product['Status'] = Tools::getValue('status_' . $i);
                     }
             }
-
-        // Check if there order item status to change
-        if (empty($order_items))
-            return false;
-
-        // Make API call
-        try
-        {
-            // Calling the confirmOrder service
-            $client = new Sellermania\OrderConfirmClient();
-            $client->setEmail(Configuration::get('SM_ORDER_EMAIL'));
-            $client->setToken(Configuration::get('SM_ORDER_TOKEN'));
-            $client->setEndpoint(Configuration::get('SM_CONFIRM_ORDER_ENDPOINT'));
-            $result = $client->confirmOrder($order_items);
-
-            // Fix data (when only one result, array is not the same)
-            if (!isset($result['OrderItemConfirmationStatus'][0]))
-                $result['OrderItemConfirmationStatus'] = array($result['OrderItemConfirmationStatus']);
-
-            // Return results
-            return $result;
-        }
-        catch (\Exception $e)
-        {
-            $this->context->smarty->assign('sellermania_error', strip_tags($e->getMessage()));
         }
 
+        $sellermaniaRepository = new SellermaniaRepository(Db::getInstance());
+        return $sellermaniaRepository->saveProductsStatus($sellermaniaOrder, $products);
     }
 
     /**
      * Save shipping status
-     * @param string $order_id
+     * @return array|bool
      */
-    public function saveShippingStatus($sellermania_order)
+    public function saveShippingStatus()
     {
         // Check if form has been submitted
         if (Tools::getValue('sellermania_tracking_registration') == '')
             return false;
 
         // Check shipping status
-        $status_to_ship = self::isStatusToShip($sellermania_order);
-        if ($status_to_ship != 1)
+        if (!($readyToShip = $this->sellermaniaRepository->isOrderReadyToShip())) {
             return false;
+        }
 
         // Set orders param
         $orders = array(
@@ -154,7 +133,8 @@ class SellermaniaDisplayAdminOrderController
 
     /**
      * Save shipping status
-     * @param string $order_id
+     * @param $orders
+     * @return array|bool
      */
     public static function registerShippingData($orders)
     {
@@ -172,12 +152,10 @@ class SellermaniaDisplayAdminOrderController
                 $sellermania_order = json_decode($sellermania_order, true);
 
                 // Check shipping status
-                $status_to_ship = self::isStatusToShip($sellermania_order);
-                if ($status_to_ship == 1)
-                {
+                if (self::isReadyToShip($sellermania_order)) {
                     // Preprocess data
-                    foreach ($sellermania_order['OrderInfo']['Product'] as $product)
-                        if ($product['Status'] == 1)
+                    foreach ($sellermania_order['OrderInfo']['Product'] as $product) {
+                        if ($product['Status'] == 1) {
                             $order_items[] = array(
                                 'orderId' => pSQL($sellermania_order['OrderInfo']['OrderId']),
                                 'sku' => pSQL($product['Sku']),
@@ -185,6 +163,8 @@ class SellermaniaDisplayAdminOrderController
                                 'trackingNumber' => pSQL($order['tracking_number']),
                                 'shippingCarrier' => pSQL($order['shipping_name']),
                             );
+                        }
+                    }
                 }
             }
         }
@@ -260,17 +240,9 @@ class SellermaniaDisplayAdminOrderController
      * @param $sellermania_order
      * @return int flag
      */
-    public static function isStatusToShip($sellermania_order)
+    public static function isReadyToShip($sellermania_order)
     {
-        // Check if there is a flag to dispatch
-        $status_to_ship = 0;
-        foreach ($sellermania_order['OrderInfo']['Product'] as $product)
-            if (isset($product['Status']) && $product['Status'] == 1)
-                $status_to_ship = 1;
-        foreach ($sellermania_order['OrderInfo']['Product'] as $product)
-            if (isset($product['Status']) && $product['Status'] != 1 && $product['Status'] != 4)
-                $status_to_ship = 0;
-        return $status_to_ship;
+
     }
 
 
@@ -348,14 +320,14 @@ class SellermaniaDisplayAdminOrderController
         if ($order->id < 1)
             return false;
 
-
+        $employeeId = isset($this->context->employee) ? $this->context->employee->id : 0;
         // *** Orders Export Compliancy *** //
         // If the new state is TO DISPATCH or DISPATCHED
         if (in_array((int)$new_order_state, array(Configuration::get('PS_OS_SM_TO_DISPATCH'), Configuration::get('PS_OS_SM_DISPATCHED'))))
         {
             // Retrieve order history
             $order_history_ids = array();
-            $order_history = $order->getHistory($this->context->cookie->id_lang);
+            $order_history = $order->getHistory(Configuration::get('PS_DEFAULT_LANG'));
             foreach ($order_history as $oh)
                 $order_history_ids[] = $oh['id_order_state'];
 
@@ -365,7 +337,7 @@ class SellermaniaDisplayAdminOrderController
                 // We add the payment state
                 $history = new OrderHistory();
                 $history->id_order = $order->id;
-                $history->id_employee = (int)$this->context->employee->id;
+                $history->id_employee = $employeeId;
                 $history->id_order_state = (int)Configuration::get('PS_OS_PAYMENT');
                 $history->changeIdOrderState((int)Configuration::get('PS_OS_PAYMENT'), $order->id);
                 $history->add();
@@ -376,7 +348,7 @@ class SellermaniaDisplayAdminOrderController
         // Create new OrderHistory
         $history = new OrderHistory();
         $history->id_order = $order->id;
-        $history->id_employee = (int)$this->context->employee->id;
+        $history->id_employee = $employeeId;
         $history->id_order_state = (int)$new_order_state;
         $history->changeIdOrderState((int)$new_order_state, $order->id);
         $history->add();
@@ -389,30 +361,33 @@ class SellermaniaDisplayAdminOrderController
      */
     public function run()
     {
-        // Retrieve order data
-        $sellermania_order = Db::getInstance()->getValue('SELECT `info` FROM `'._DB_PREFIX_.'sellermania_order` WHERE `id_order` = '.(int)Tools::getValue('id_order'));
-        if (empty($sellermania_order))
-            return '';
+        $orderId = (int)Tools::getValue('id_order');
+        $sellermaniaOrder = SellermaniaOrder::getSellermaniaOrderFromOrderId($orderId);
+        $this->sellermaniaRepository = new SellermaniaRepository(Db::getInstance(), $sellermaniaOrder);
+        $info = $sellermaniaOrder->getApiOrderInfo();
 
-        // Decode order data
-        $sellermania_order = json_decode($sellermania_order, true);
+        // Retrieve order data
+        if (!ValidateCore::isLoadedObject($sellermaniaOrder) || empty($info)) {
+            return '';
+        }
 
         // Save order line status
-        $result_status_update = $this->saveOrderStatus($sellermania_order['OrderInfo']['OrderId'], $sellermania_order);
+        $result_status_update = $this->saveProductsStatusFromRequest($sellermaniaOrder);
 
         // Check if there is a flag to dispatch
-        $result_shipping_status_update = $this->saveShippingStatus($sellermania_order);
+        $result_shipping_status_update = $this->saveShippingStatus($info);
 
         // Refresh order from Sellermania webservices
-        $return = $this->refreshOrder($sellermania_order['OrderInfo']['OrderId']);
-        if ($return !== false)
-            $sellermania_order = $return;
+        $return = $this->refreshOrder($info['OrderInfo']['OrderId']);
+        if ($return !== false) {
+            $info = $return;
+        }
 
         // Refresh flag to dispatch
-        $status_to_ship = self::isStatusToShip($sellermania_order);
+        $isReadyToShip = self::isReadyToShip($info);
 
         // Refresh order status
-        $this->refreshOrderStatus(Tools::getValue('id_order'), $sellermania_order);
+        $this->refreshOrderStatus(Tools::getValue('id_order'), $info);
 
         // Get order currency
         $order = new Order((int)Tools::getValue('id_order'));
@@ -423,12 +398,12 @@ class SellermaniaDisplayAdminOrderController
             $this->context->smarty->ps_language = new Language($this->context->cookie->id_lang);
 
         $this->context->smarty->assign('ps_version', $this->ps_version);
-        $this->context->smarty->assign('sellermania_order', $sellermania_order);
+        $this->context->smarty->assign('sellermania_order', $info);
         $this->context->smarty->assign('sellermania_currency', $sellermania_currency);
         $this->context->smarty->assign('sellermania_module_path', $this->web_path);
         $this->context->smarty->assign('sellermania_status_list', $this->status_list);
         $this->context->smarty->assign('sellermania_conditions_list', $this->module->sellermania_conditions_list);
-        $this->context->smarty->assign('sellermania_status_to_ship', $status_to_ship);
+        $this->context->smarty->assign('sellermania_status_to_ship', $isReadyToShip);
         $this->context->smarty->assign('sellermania_status_update', $result_status_update);
         $this->context->smarty->assign('sellermania_shipping_status_update', $result_shipping_status_update);
 
