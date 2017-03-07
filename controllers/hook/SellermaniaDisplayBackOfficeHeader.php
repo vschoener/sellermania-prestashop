@@ -137,6 +137,7 @@ class SellermaniaDisplayBackOfficeHeaderController
 
                         // Check if order exists
                         $id_sellermania_order = SellermaniaOrder::getSellermaniaOrderId($order['OrderInfo']['MarketPlace'], $order['OrderInfo']['OrderId']);
+                        $sellermaniaRepository = new SellermaniaRepository(Db::getInstance());
                         if ($id_sellermania_order > 0)
                         {
                             // Verbose mode
@@ -144,6 +145,7 @@ class SellermaniaDisplayBackOfficeHeaderController
 
                             // If do exist and associate to a PrestaShop order, we update order status
                             $smo = new SellermaniaOrder((int)$id_sellermania_order);
+                            $sellermaniaRepository->setSellermaniaOrder($smo);
                             if ($smo->id_order > 0)
                             {
                                 try
@@ -152,8 +154,7 @@ class SellermaniaDisplayBackOfficeHeaderController
                                     $import_order = new SellermaniaImportOrderController($this->module, $this->dir_path, $this->web_path);
                                     $import_order->refreshOrder($smo, $order);
 
-                                    $sdao = new SellermaniaDisplayAdminOrderController($this->module, $this->dir_path, $this->web_path);
-                                    $sdao->refreshOrderStatus($smo->id_order, $order);
+                                    $sellermaniaRepository->refreshOrderStatus($smo->id_order, $order, $this->module);
                                 }
                                 catch (\Exception $e)
                                 {
@@ -184,9 +185,7 @@ class SellermaniaDisplayBackOfficeHeaderController
                                 $import_order->run($order);
                                 $count_order++;
 
-                                // Refresh order status immediately
-                                $sdao = new SellermaniaDisplayAdminOrderController($this->module, $this->dir_path, $this->web_path);
-                                $sdao->refreshOrderStatus($import_order->order->id, $order);
+                                $sellermaniaRepository->refreshOrderStatus($import_order->order->id, $order, $this->module);
                             }
                             catch (\Exception $e)
                             {

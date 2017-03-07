@@ -67,6 +67,15 @@ class SellermaniaOrder extends ObjectModel
     /** @var string Date Import */
     public $date_add;
 
+    public $isHandled;
+
+    /**
+     * @var array
+     */
+    private $decodedAPIInfo;
+
+    public $details;
+
     /**
      * @see ObjectModel::$definition
      */
@@ -100,12 +109,31 @@ class SellermaniaOrder extends ObjectModel
      */
 
     /**
+     * @param $ref
+     * @return null|SellermaniaOrder
+     */
+    public static function getFromRefOrder($ref)
+    {
+        $ref = pSQL($ref);
+        $db = _DB_PREFIX_.'sellermania_order so';
+        $id = Db::getInstance(_PS_USE_SQL_SLAVE_)->getValue("
+            SELECT so.id_sellermania_order
+            FROM $db
+            WHERE so.ref_order = '$ref'
+        ");
+
+        return $id ? new SellermaniaOrder($id) : null;
+    }
+
+    /**
      * Retrieve Sellermania Order object from id_order
      * @param $id_order
      * @return SellermaniaOrder
      */
     public static function getSellermaniaOrderFromOrderId($id_order)
     {
+        $shipping_vat_rate = 1.0;
+
         // Retrieve Sellermania order details
         $id_sellermania_order = (int)Db::getInstance()->getValue('
         SELECT `id_sellermania_order`
@@ -257,15 +285,15 @@ class SellermaniaOrder extends ObjectModel
     }
 
     /**
-     * @return bool|mixed
+     * @return mixed
      */
     public function getApiOrderInfo()
     {
-        $apiInfo = false;
-        if (Validate::isLoadedObject($this)) {
-            $apiInfo = json_decode($this->info, true);
+        if (!isset($this->decodedAPIInfo)) {
+            $this->decodedAPIInfo = json_decode($this->info, true);
         }
-        return $apiInfo;
+
+        return is_array($this->decodedAPIInfo) ? $this->decodedAPIInfo : [];
     }
 
     /**
@@ -275,6 +303,8 @@ class SellermaniaOrder extends ObjectModel
     public function setApiInfo(array $sellermaniaOrderInfo)
     {
         $this->info = json_encode($sellermaniaOrderInfo);
+        $this->decodedAPIInfo = $sellermaniaOrderInfo;
+
         return $this;
     }
 }

@@ -22,7 +22,7 @@
                     }).get()
                 }
             }).success(function() {
-                console.log('ok');
+                location.reload();
             })
         };
 
