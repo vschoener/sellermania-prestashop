@@ -992,7 +992,7 @@ class SellermaniaImportOrderController
 
         if (version_compare(_PS_VERSION_, '1.4', '>')) {
             $currentStock = StockAvailable::getQuantityAvailableByProduct($orderDetail->product_id, $orderDetail->product_attribute_id);
-            StockAvailable::setQuantity($orderDetail->product_id, $orderDetail->product_attribute_id, $currentStock - $quantity);
+            StockAvailable::updateQuantity($orderDetail->product_id, $orderDetail->product_attribute_id, $currentStock - $quantity);
         } else {
 
             // Handle product quantities
